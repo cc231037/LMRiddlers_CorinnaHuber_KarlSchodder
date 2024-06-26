@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Riddlers</title>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #eedebd;
+        }
+        .message {
+            margin-bottom: 10px;
+        }
+        #chat {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 2px solid #000;
+            padding: 10px;
+            border-radius: 10px;
+        }
+        input {
+            border: 2px solid #000;
+            margin-top: 1rem;
+            width: 40%;
+            height: 44px;
+            padding-left: 10px;
+            border-radius: 10px;
+        }
+        button {
+            border: 2px solid #000;
+            margin-top: 1rem;
+            height: 50px;
+            width: auto;
+            padding: 0 18px;
+            background-color: #d2b48c;
+            color: #000;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 10px;
+        }
+        button:hover {
+            background-color: #a67b5b;
+        }
+        #topic_display {
+            border: 2px solid #000;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-weight: bold;
+            width: 40%;
+            border-radius: 10px;
+        }
+        .agent-name {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Riddlers</h1>
+    <div id="topic_display"></div>
+    <div id="chat"></div>
+    <input type="text" id="topic_input" placeholder="Enter a topic..." autocomplete="off"/>
+    <button onclick="startConversation()">Start Conversation</button>
+    <button onclick="stopConversation()">Shut Up</button>
+
+    <div id="agent_controls"></div>
+
+    <script>
+        var socket = io.connect('http://127.0.0.1:5000');
+        var currentMessageContainer = null;
+        var currentRole = null;
+        var agentColors = {};
+
+        socket.on('new_message', function(msg) {
+            var chat = document.getElementById('chat');
+            if (!agentColors[msg.role]) {
+                agentColors[msg.role] = getRandomColor();
+            }
+
+            if (currentRole !== msg.role || !currentMessageContainer) {
+                currentMessageContainer = document.createElement('div');
+                currentMessageContainer.className = 'message';
+                var agentName = document.createElement('span');
+                agentName.className = 'agent-name';
+                agentName.style.color = agentColors[msg.role];
+                agentName.textContent = msg.role + ": ";
+                currentMessageContainer.appendChild(agentName);
+                chat.appendChild(currentMessageContainer);
+                currentRole = msg.role;
+            }
+            currentMessageContainer.innerHTML = `<span class="agent-name" style="color: ${agentColors[msg.role]}">${msg.role}:</span> ${msg.content}`;
+            chat.scrollTop = chat.scrollHeight;
+        });
+
+        socket.on('connect', function() {
+            fetch('/agents').then(response => response.json()).then(data => {
+                var agentControls = document.getElementById('agent_controls');
+                data.agents.forEach(agent => {
+                    var agentControl = document.createElement('div');
+                    var agentName = document.createElement('span');
+                    agentName.textContent = agent;
+                    agentName.style.color = getRandomColor();
+                    agentName.className = 'agent-name';
+                    agentControl.appendChild(agentName);
+                    var muteButton = document.createElement('button');
+                    muteButton.textContent = 'Mute';
+                    muteButton.onclick = function() { toggleMuteAgent(agent, muteButton); };
+                    agentControl.appendChild(muteButton);
+                    agentControls.appendChild(agentControl);
+                    agentColors[agent] = agentName.style.color;
+                });
+            });
+        });
+
+        function startConversation() {
+            var input = document.getElementById('topic_input');
+            var topic = input.value;
+            var topicDisplay = document.getElementById('topic_display');
+            topicDisplay.textContent = `Topic: ${topic}`;
+            socket.emit('start_conversation', { topic: topic });
+            input.value = '';
+        }
+
+        function stopConversation() {
+            socket.emit('stop_conversation');
+        }
+
+        function toggleMuteAgent(agent, button) {
+            if (button.textContent === 'Mute') {
+                socket.emit('mute_agent', { agent: agent });
+                button.textContent = 'Unmute';
+            } else {
+                socket.emit('unmute_agent', { agent: agent });
+                button.textContent = 'Mute';
+            }
+        }
+
+        function getRandomColor() {
+            var letters = '0123456789ABCDEF';
+            var color = '#';
+            for (var i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+    </script>
+</body>
+</html>
